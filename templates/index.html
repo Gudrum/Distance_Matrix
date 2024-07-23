@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ruta Óptima en Ecuador</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Calculadora de Ruta Óptima en Ecuador</h1>
+        </header>
+        <main>
+            <form id="cityForm">
+                <h2>Seleccione las ciudades a visitar:</h2>
+                <div class="city-list">
+                    {% for ciudad in cities %}
+                    <div class="city-input">
+                        <input type="checkbox" id="{{ ciudad }}" name="cities[]" value="{{ ciudad }}">
+                        <label for="{{ ciudad }}">{{ ciudad }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+                <input type="submit" value="Calcular Ruta" class="btn">
+            </form>
+            <div id="resultado"></div>
+            <div id="map" style="height: 500px; margin-top: 20px;"></div>
+        </main>
+    </div>
+    
+    <script>
+        let map;
+        let directionsService;
+        let directionsRenderer;
+
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: {lat: -1.8312, lng: -78.1834},
+                zoom: 7
+            });
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer();
+            directionsRenderer.setMap(map);
+        }
+
+        document.getElementById('cityForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const checkboxes = document.querySelectorAll('input[name="cities[]"]');
+            const cities = Array.from(checkboxes).filter(el => el.checked).map(el => el.value);
+
+            if (cities.length < 2) {
+                alert('Por favor, seleccione al menos dos ciudades.');
+                return;
+            }
+
+            axios.post('{{ url_for("calculate") }}', {
+                cities: cities
+            })
+            .then(function (response) {
+                const resultado = document.getElementById('resultado');
+                resultado.innerHTML = `
+                    <h3>Ruta Óptima:</h3>
+                    <p>${response.data.path.join(' -> ')}</p>
+                    <p>Distancia total: ${response.data.total_distance}</p>
+                    <p>Tiempo total estimado: ${response.data.total_time}</p>
+                `;
+                displayRoute(response.data.path);
+                updateCityAvailability(response.data.unavailable_cities);
+            })
+            .catch(function (error) {
+                console.error('Error:', error);
+                alert('Hubo un error al calcular la ruta. Por favor, intente de nuevo.');
+            });
+        });
+
+        function displayRoute(path) {
+            const waypoints = path.slice(1, -1).map(city => ({
+                location: city + ', Ecuador',
+                stopover: true
+            }));
+
+            const request = {
+                origin: path[0] + ', Ecuador',
+                destination: path[path.length - 1] + ', Ecuador',
+                waypoints: waypoints,
+                optimizeWaypoints: true,
+                travelMode: 'DRIVING'
+            };
+
+            directionsService.route(request, function(result, status) {
+                if (status === 'OK') {
+                    directionsRenderer.setDirections(result);
+                } else {
+                    alert('No se pudo mostrar la ruta en el mapa: ' + status);
+                }
+            });
+        }
+
+        function updateCityAvailability(unavailable_cities) {
+            const checkboxes = document.querySelectorAll('input[name="cities[]"]');
+            checkboxes.forEach(checkbox => {
+                if (unavailable_cities.includes(checkbox.value)) {
+                    checkbox.checked = false;
+                    checkbox.disabled = true;
+                    const label = document.querySelector(`label[for="${checkbox.id}"]`);
+                    label.classList.add('unavailable');
+                    label.title = 'Ruta no disponible';
+                }
+            });
+        }
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initMap" async defer></script>
+</body>
+</html>

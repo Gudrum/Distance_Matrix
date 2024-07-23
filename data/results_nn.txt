@@ -1,0 +1,2 @@
+Ruta: 0 -> 0
+Distancia total: 0.0
